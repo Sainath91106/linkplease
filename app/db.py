@@ -7,15 +7,38 @@ whole point of this assignment is not losing DMs.
 import sqlite3
 import os
 import threading
+from pathlib import Path
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "..", "linkplease.db"))
+# Resolve relative paths against the project root, not the process working
+# directory. This keeps local and Render start commands consistent.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DB_PATH = Path(os.environ.get("DB_PATH", PROJECT_ROOT / "linkplease.db")).expanduser()
+if not DB_PATH.is_absolute():
+    DB_PATH = PROJECT_ROOT / DB_PATH
 
 # sqlite + threads is a bit finicky, one lock for all writes keeps it sane
 _lock = threading.Lock()
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # sqlite creates the database file itself, but not its parent directory.
+    # On Render this is commonly a mounted disk path such as /var/data/app.db.
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RuntimeError(
+            f"Cannot create SQLite database directory '{DB_PATH.parent}'. "
+            "Set DB_PATH to a writable location (use /var/data/linkplease.db "
+            "when a Render persistent disk is mounted at /var/data)."
+        ) from exc
+
+    try:
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+    except sqlite3.OperationalError as exc:
+        raise RuntimeError(
+            f"Cannot open SQLite database at '{DB_PATH}'. "
+            "Ensure DB_PATH is a writable file path, not a directory."
+        ) from exc
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")  # so reads don't block on writes
     return conn

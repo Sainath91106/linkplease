@@ -59,7 +59,7 @@ Then compare `GET /stats` on this app against
 |---|---|---|
 | `PSEUDOGRAM_API_KEY` | yes, before real testing | your key, used both to call the mock API and to verify incoming webhook signatures |
 | `PSEUDOGRAM_BASE_URL` | no | defaults to `https://pseudogram-api.onrender.com` |
-| `DB_PATH` | no | defaults to `linkplease.db` next to the app |
+| `DB_PATH` | no | defaults to `linkplease.db` next to the app. On Render, set it to `/var/data/linkplease.db` after mounting a persistent disk at `/var/data`. |
 
 ## Deploying
 
@@ -73,7 +73,8 @@ buildpacks:
 web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-One thing to know: `DB_PATH` should point at a persistent disk if the
-host wipes the filesystem on redeploy (e.g. Render's free tier does,
-unless you attach a disk) — otherwise pending jobs get lost on redeploy,
-same as any restart-without-persistence issue.
+For Render, attach a persistent disk mounted at `/var/data`, then set
+`DB_PATH=/var/data/linkplease.db` in the service's environment. The app
+creates the containing directory when it is writable. Without a persistent
+disk, use a writable path such as `linkplease.db` to start successfully,
+but the database (and pending jobs) will be lost on redeploy.
